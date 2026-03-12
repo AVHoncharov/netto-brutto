@@ -161,12 +161,11 @@
       warnEl.style.display = 'none';
       warnEl.textContent = '';
 
-      const p = Number(pitEl.value);    // 0.12 или 0.32
-      const kup = Number(kupEl.value);  // обычно 250
+      const p = Number(pitEl.value);
+      const kup = Number(kupEl.value);
 
-      const denom = 1 - 0.09 - p;       // (1 - zdrowotna - PIT)
+      const denom = 1 - 0.09 - p;
 
-      // Покажем формулу, которую используем
       formulaOut.textContent = `Формула: Brutto = (Netto - KUP*PIT) / (1 - 0.09 - PIT) = (Netto - ${fmt(kup*p)}) / ${fmt(denom)}`;
 
       if (raw === '') {
