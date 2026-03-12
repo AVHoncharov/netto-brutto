@@ -143,63 +143,126 @@
     </div>
   </div>
 
-  <script>
-    const nettoEl = document.getElementById('netto');
-    const pitEl = document.getElementById('pit');
-    const kupEl = document.getElementById('kup');
+<script>
+  const nettoEl = document.getElementById('netto');
+  const pitEl = document.getElementById('pit');
+  const kupEl = document.getElementById('kup');
 
-    const bruttoOut = document.getElementById('bruttoOut');
-    const formulaOut = document.getElementById('formulaOut');
-    const warnEl = document.getElementById('warn');
+  const bruttoOut = document.getElementById('bruttoOut');
+  const formulaOut = document.getElementById('formulaOut');
+  const warnEl = document.getElementById('warn');
 
-    function fmt(n) {
-      return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+  function round2(n) {
+    return Math.round((n + Number.EPSILON) * 100) / 100;
+  }
+
+  function fmt(n) {
+    return new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+  }
+
+function nettoFromBrutto(brutto, pitRate, kup) {
+  const zdrowotna = round2(0.09 * brutto);
+
+  let pitBase = brutto - kup;
+
+  pitBase = Math.round(pitBase);
+
+  // PIT
+  let pit = pitRate * pitBase;
+
+  // round to zł
+  pit = Math.round(pit);
+
+  const netto = round2(brutto - zdrowotna - pit);
+
+  return { netto, zdrowotna, pitBase, pit };
+}
+  function bruttoFromNetto(targetNetto, pitRate, kup) {
+    let lo = 0;
+    let hi = Math.max(1000, targetNetto * 3);
+
+    for (let i = 0; i < 30; i++) {
+      const { netto } = nettoFromBrutto(hi, pitRate, kup);
+      if (netto >= targetNetto) break;
+      hi *= 2;
     }
 
-    function recalc() {
-      const raw = nettoEl.value.trim();
-      warnEl.style.display = 'none';
-      warnEl.textContent = '';
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2;
+      const { netto } = nettoFromBrutto(mid, pitRate, kup);
 
-      const p = Number(pitEl.value);
-      const kup = Number(kupEl.value);
+      if (netto < targetNetto) lo = mid;
+      else hi = mid;
+    }
 
-      const denom = 1 - 0.09 - p;
+    
+    const base = round2(hi);
+    const candidates = [
+      round2(base - 0.02),
+      round2(base - 0.01),
+      base,
+      round2(base + 0.01),
+      round2(base + 0.02),
+    ].filter(x => x >= 0);
 
-      formulaOut.textContent = `Формула: Brutto = (Netto - KUP*PIT) / (1 - 0.09 - PIT) = (Netto - ${fmt(kup*p)}) / ${fmt(denom)}`;
+    let best = candidates[0];
+    let bestDiff = Infinity;
 
-      if (raw === '') {
-        bruttoOut.textContent = '—';
-        return;
-      }
-
-      const netto = Number(raw);
-      if (!Number.isFinite(netto) || !Number.isFinite(kup) || !Number.isFinite(p)) {
-        bruttoOut.textContent = '—';
-        return;
-      }
-
-      if (denom <= 0) {
-        bruttoOut.textContent = '—';
-        warnEl.style.display = 'block';
-        warnEl.textContent = 'Ошибка: (1 - 0.09 - PIT) должно быть > 0.';
-        return;
-      }
-
-      const brutto = (netto - kup * p) / denom;
-
-      bruttoOut.textContent = fmt(brutto);
-
-      if (brutto < 0) {
-        warnEl.style.display = 'block';
-        warnEl.textContent = 'Brutto получилось отрицательным — это возможно только если Netto слишком маленькое относительно KUP и ставки PIT. Проверь входные данные.';
+    for (const b of candidates) {
+      const { netto } = nettoFromBrutto(b, pitRate, kup);
+      const diff = Math.abs(netto - targetNetto);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = b;
       }
     }
 
-    nettoEl.addEventListener('input', recalc);
-    pitEl.addEventListener('change', recalc);
-    kupEl.addEventListener('input', recalc);
-    recalc();
-  </script>
+    return best;
+  }
+
+  function recalc() {
+    warnEl.style.display = 'none';
+    warnEl.textContent = '';
+
+    const raw = nettoEl.value.trim();
+    const pitRate = Number(pitEl.value);
+    const kup = Number(kupEl.value);
+
+    if (raw === '') {
+      bruttoOut.textContent = '—';
+      formulaOut.textContent = '';
+      return;
+    }
+
+    const targetNetto = round2(Number(raw));
+    if (!Number.isFinite(targetNetto) || !Number.isFinite(pitRate) || !Number.isFinite(kup)) {
+      bruttoOut.textContent = '—';
+      formulaOut.textContent = '';
+      return;
+    }
+
+    const brutto = bruttoFromNetto(targetNetto, pitRate, kup);
+    const breakdown = nettoFromBrutto(brutto, pitRate, kup);
+
+    bruttoOut.textContent = fmt(brutto);
+
+    formulaOut.textContent =
+      `Шаги (с округлением): zdrowotna=9% → ${fmt(breakdown.zdrowotna)} zł, ` +
+      `PIT база=(Brutto-KUP) → ${fmt(breakdown.pitBase)} zł, ` +
+      `PIT=${Math.round(pitRate*100)}% → ${fmt(breakdown.pit)} zł. ` +
+      `Проверка Netto: ${fmt(breakdown.netto)} zł`;
+
+    if (Math.abs(breakdown.netto - targetNetto) > 0.01) {
+      warnEl.style.display = 'block';
+      warnEl.textContent = 'Не удалось попасть точно в 0.01 zł из-за округлений. Попробуй уточнить правила округления в твоём источнике.';
+    }
+  }
+
+  nettoEl.addEventListener('input', recalc);
+  pitEl.addEventListener('change', recalc);
+  kupEl.addEventListener('input', recalc);
+
+  recalc();
+</script>
 </body>
 </html>
