@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Netto → Brutto (PL) калькулятор</title>
+ <style>
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: linear-gradient(135deg, #f4f6f9, #e9eef5);
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 640px;
+    background: white;
+    padding: 32px;
+    border-radius: 20px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+  }
+
+  h1 {
+    margin-top: 0;
+    font-size: 32px;
+    line-height: 1.2;
+  }
+
+  label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    font-size: 15px;
+  }
+
+  input, select {
+    width: 100%;
+    padding: 14px 16px;
+    font-size: 16px;
+    border-radius: 12px;
+    border: 1px solid #dcdcdc;
+    transition: all 0.2s ease;
+    background: #fafafa;
+  }
+
+  input:focus, select:focus {
+    outline: none;
+    border-color: #2563eb;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  }
+
+  .row {
+    margin-top: 20px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  @media (max-width: 640px) {
+    .grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .muted {
+    color: #6b7280;
+    font-size: 14px;
+    margin-top: 6px;
+  }
+
+  .result {
+    margin-top: 28px;
+    padding: 20px;
+    border-radius: 16px;
+    background: #f3f6fb;
+    border: 1px solid #e1e7f0;
+  }
+
+  .result strong {
+    font-size: 28px;
+    font-weight: 700;
+    display: block;
+    margin-top: 6px;
+  }
+
+  .warn {
+    color: #dc2626;
+    font-size: 14px;
+    margin-top: 8px;
+  }
+
+  code {
+    background: #eef2f7;
+    padding: 3px 6px;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1 style="margin-top:0;">Netto → Brutto (Польша, упрощённо)</h1>
+
+    <div class="row">
+      <label for="netto">Netto (zł)</label>
+      <input id="netto" type="number" inputmode="decimal" step="0.01" placeholder="Введите Netto, например 5000" />
+      <div class="muted">
+        Используется формула: <code>Netto = Brutto - 9%*Brutto - PIT*(Brutto - KUP)</code>
+      </div>
+    </div>
+
+    <div class="row grid">
+      <div>
+        <label for="pit">Ставка PIT</label>
+        <select id="pit">
+          <option value="0.12">12%</option>
+          <option value="0.32">32%</option>
+        </select>
+      </div>
+      <div>
+        <label for="kup">KUP (zł)</label>
+        <input id="kup" type="number" inputmode="numeric" step="1" value="250" />
+        <div class="muted">Обычно 250 zł/мес (стандарт).</div>
+      </div>
+    </div>
+
+    <div class="result" id="result">
+      Brutto: <strong id="bruttoOut">—</strong>
+      <div class="muted" id="formulaOut"></div>
+      <div class="warn" id="warn" style="display:none;"></div>
+    </div>
+  </div>
+
+  <script>
+    const nettoEl = document.getElementById('netto');
+    const pitEl = document.getElementById('pit');
+    const kupEl = document.getElementById('kup');
+
+    const bruttoOut = document.getElementById('bruttoOut');
+    const formulaOut = document.getElementById('formulaOut');
+    const warnEl = document.getElementById('warn');
+
+    function fmt(n) {
+      return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+    }
+
+    function recalc() {
+      const raw = nettoEl.value.trim();
+      warnEl.style.display = 'none';
+      warnEl.textContent = '';
+
+      const p = Number(pitEl.value);    // 0.12 или 0.32
+      const kup = Number(kupEl.value);  // обычно 250
+
+      const denom = 1 - 0.09 - p;       // (1 - zdrowotna - PIT)
+
+      // Покажем формулу, которую используем
+      formulaOut.textContent = `Формула: Brutto = (Netto - KUP*PIT) / (1 - 0.09 - PIT) = (Netto - ${fmt(kup*p)}) / ${fmt(denom)}`;
+
+      if (raw === '') {
+        bruttoOut.textContent = '—';
+        return;
+      }
+
+      const netto = Number(raw);
+      if (!Number.isFinite(netto) || !Number.isFinite(kup) || !Number.isFinite(p)) {
+        bruttoOut.textContent = '—';
+        return;
+      }
+
+      if (denom <= 0) {
+        bruttoOut.textContent = '—';
+        warnEl.style.display = 'block';
+        warnEl.textContent = 'Ошибка: (1 - 0.09 - PIT) должно быть > 0.';
+        return;
+      }
+
+      const brutto = (netto - kup * p) / denom;
+
+      bruttoOut.textContent = fmt(brutto);
+
+      if (brutto < 0) {
+        warnEl.style.display = 'block';
+        warnEl.textContent = 'Brutto получилось отрицательным — это возможно только если Netto слишком маленькое относительно KUP и ставки PIT. Проверь входные данные.';
+      }
+    }
+
+    nettoEl.addEventListener('input', recalc);
+    pitEl.addEventListener('change', recalc);
+    kupEl.addEventListener('input', recalc);
+    recalc();
+  </script>
+</body>
+</html>
